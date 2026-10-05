@@ -156,6 +156,15 @@ li.kopen > .kwrap .kfold::before { content:"\25BE"; }
 .knode.kroot { background:#0ea5e9; color:#fff; font-weight:700; font-size:15px; padding:9px 16px; border:none; }
 .knode.khas { font-weight:600; border-color:#b9cbe2; background:#fbfdff; }
 .knode.kleaf { font-weight:400; font-size:13px; }
+/* 层级配色：同一层同色、不同层不同色（用户 2026-10-05 要求） */
+.knode.kd1 { background:#eaf4ff; border-color:#a9c9ef; }
+.knode.kd2 { background:#eefaf1; border-color:#a8dcb8; }
+.knode.kd3 { background:#fbf6ff; border-color:#d5c3ee; }
+.knode.kd4 { background:#f7fafc; border-color:#cbd5e1; }
+/* 对齐：叶子节点也占一个折叠符位置，保证同一层在一条竖线上 */
+.kfold.kfold-none { visibility:hidden; pointer-events:none; }
+/* 手动编辑模式 */
+.knode.kediting { outline:2px dashed #f59e0b; outline-offset:2px; cursor:text; }
 .knode.khit { background:#fef3c7; border-color:#f59e0b; color:#b45309; animation:kpulse 1s ease 2; }
 .knode.kroot.khit { background:#d97706; color:#fff; }
 .knode.kdim { opacity:.25; }
@@ -1627,22 +1636,25 @@ function matchSection(subj, q){
 /* ---- 新版树状知识导图：渲染 / 折叠 / 定位 ---- */
 let topicTreeData = null;
 function cnNum(n){ return ['一','二','三','四','五','六','七','八','九','十','十一','十二','十三','十四','十五'][n-1] || n; }
-function renderTreeNode(parentUl, node, isLast, isRoot, subject, inNote){
+function renderTreeNode(parentUl, node, isLast, isRoot, subject, inNote, depth, path){
+  depth = depth || 0; path = path || '';
   const isNote = node.t.indexOf('📌') === 0;
   const li = document.createElement('li');
   li.className = isLast ? 'kcont klast' : 'kcont';
   const kids = node.c || [];
-  li.innerHTML = '<div class="kwrap">' + (kids.length ? '<span class="kfold"></span>' : '') +
-    '<span class="knode ' + (isNote ? 'knote' : (inNote ? 'knote2' : (isRoot ? 'kroot' : kids.length ? 'khas' : 'kleaf'))) + '" title="点击：高亮并查看相关真题">' + esc(node.t) + '</span></div>' +
+  li.innerHTML = '<div class="kwrap"><span class="kfold' + (kids.length ? '' : ' kfold-none') + '"></span>' +
+    '<span class="knode ' + (isNote ? 'knote' : (inNote ? 'knote2' : (isRoot ? 'kroot' : kids.length ? 'khas' : 'kleaf'))) +
+    ' kd' + Math.min(depth, 4) + '" data-p="' + path + '" title="点击：高亮并查看相关真题">' + esc(node.t) + '</span></div>' +
     (kids.length ? '<ul class="tkids"></ul>' : '');
   parentUl.appendChild(li);
   if (kids.length){
     li.classList.add('kopen');
     const ul = li.querySelector(':scope > .tkids');
-    kids.forEach((k, i) => renderTreeNode(ul, k, i === kids.length - 1, false, subject, inNote || isNote));
+    kids.forEach((k, i) => renderTreeNode(ul, k, i === kids.length - 1, false, subject, inNote || isNote, depth + 1, path ? path + '-' + i : String(i)));
     li.querySelector(':scope > .kwrap .kfold').onclick = function(){ li.classList.toggle('kclosed'); li.classList.toggle('kopen'); };
   }
   li.querySelector(':scope > .kwrap .knode').onclick = function(){
+    if(this.isContentEditable) return;   // 编辑模式下点击是为了改字，不弹窗
     document.querySelectorAll('.knode.khit, .knode.kpath').forEach(x => x.classList.remove('khit', 'kpath'));
     this.classList.add('khit');
     if(subject) treeNodeInfo(subject, node.t);
@@ -1673,6 +1685,80 @@ function treeToggleAll2(id, btn){
   const anyOpen = !!box.querySelector('li.kopen');
   treeToggleAll(id, !anyOpen);
   if(btn) btn.textContent = anyOpen ? '⊕ 全部展开' : '⊖ 全部收起';
+}
+/* ---- 导图手动编辑 + 修改日志：用户直接改方框文字，确认后写日志，回传日志由底层脚本落库 ---- */
+function treeDataForBox(boxId){
+  const subject = window.__mmSubject; if(!subject) return null;
+  const d = MINDMAP[subject]; if(!d) return null;
+  let m = boxId.match(/^tree-(\d+)$/), ci, si = null;
+  if(m){ ci = +m[1]; }
+  else { m = boxId.match(/^treeSec-(\d+)-(\d+)$/); if(!m) return null; ci = +m[1]; si = +m[2]; }
+  const chap = d.chaps[ci]; if(!chap) return null;
+  if(si === null) return (TREEMAP[subject] && TREEMAP[subject][chap.n]) || null;
+  const SM = (typeof SECMAP !== 'undefined') && SECMAP[subject] && SECMAP[subject][chap.n];
+  return SM ? (SM[Object.keys(SM)[si]] || null) : null;
+}
+function nodeByPath(root, path){
+  let n = root;
+  (path ? path.split('-') : []).forEach(i => { n = (n.c || [])[+i]; });
+  return n || null;
+}
+function treeEditMode(boxId, btn){
+  const box = document.getElementById(boxId); if(!box) return;
+  const nodes = box.querySelectorAll('.knode');
+  if(btn.dataset.editing !== '1'){
+    btn.dataset.editing = '1'; btn.textContent = '✓ 完成编辑';
+    nodes.forEach(e => { e.dataset.orig = e.textContent; e.contentEditable = 'true'; e.classList.add('kediting'); });
+    toast('编辑模式：直接点方框改文字，改完点「✓ 完成编辑」');
+    return;
+  }
+  btn.dataset.editing = '0'; btn.textContent = '✎ 编辑';
+  const recs = [];
+  nodes.forEach(e => {
+    e.contentEditable = 'false'; e.classList.remove('kediting');
+    const nv = e.textContent.replace(/\s+/g, ' ').trim();
+    const od = (e.dataset.orig || '').replace(/\s+/g, ' ').trim();
+    if(nv && od && nv !== od){
+      const root = treeDataForBox(boxId);
+      const node = root && nodeByPath(root, e.dataset.p);
+      if(node) recs.push({ box: boxId, p: e.dataset.p, old: node.t, new: nv });
+    }
+    delete e.dataset.orig;
+  });
+  if(!recs.length){ toast('没有检测到修改'); return; }
+  if(confirm('共修改 ' + recs.length + ' 处，是否保存？\n（保存 = 本页立即生效 + 写入修改日志）')){
+    const log = JSON.parse(localStorage.getItem('mm_edit_log') || '[]');
+    const stamp = new Date().toLocaleString('zh-CN');
+    recs.forEach(r => {
+      r.time = stamp; r.subject = window.__mmSubject || '';
+      const root = treeDataForBox(r.box);
+      const node = root && nodeByPath(root, r.p);
+      if(node) node.t = r.new;
+      log.push(r);
+    });
+    localStorage.setItem('mm_edit_log', JSON.stringify(log));
+    copyEditLog(true);
+    toast('已保存 ' + recs.length + ' 处修改，日志已复制，粘贴发给小修即可落库');
+  } else {
+    toast('已取消修改');
+  }
+}
+function copyEditLog(silent){
+  const log = JSON.parse(localStorage.getItem('mm_edit_log') || '[]');
+  if(!log.length){ if(!silent) toast('暂无修改日志'); return; }
+  const txt = JSON.stringify(log, null, 1);
+  const done = () => toast('已复制 ' + log.length + ' 条修改日志，直接粘贴发给小修');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(() => fallbackCopy(txt, done));
+  } else fallbackCopy(txt, done);
+}
+function fallbackCopy(txt, done){
+  const ta = document.createElement('textarea');
+  ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try{ if(document.execCommand('copy')) done(); else prompt('请手动全选复制修改日志', txt); }
+  catch(e){ prompt('请手动全选复制修改日志', txt); }
+  document.body.removeChild(ta);
 }
 /* 大纲 ↔ 细则联动：点大纲里的知识点，跳到细则导图对应位置 */
 function jumpOutlineToSec(ci, si, title){
@@ -1779,6 +1865,7 @@ function treeLocate(subject, ci, hit, q){
 function openMindmap(subject, q){
   const d = MINDMAP[subject];
   if(!d){ toast('该科目暂无思维导图'); return; }
+  window.__mmSubject = subject;   // 编辑日志要按科目定位底层数据
   let m = document.getElementById('mmModal');
   if(!m){ m = document.createElement('div'); m.id='mmModal'; m.className='mm-modal'; document.body.appendChild(m); }
   let html = '<div class="mm-box"><div class="mm-head"><h2>🧠 '+subject+' · 知识思维导图</h2>'+scoreBadge(d.score)+
@@ -1796,17 +1883,18 @@ function openMindmap(subject, q){
       const SM = (typeof SECMAP !== 'undefined') && SECMAP[subject] && SECMAP[subject][c.n];
       const hasSecs = !!(SM && Object.keys(SM).length);
       html += '<details class="tree-blk" id="treeBlk-'+ci+'" open><summary>🌳 '+(hasSecs?'本章大纲（先看骨架）':'树状知识导图（新版）')+'<span class="tb-hint">▸可折叠 · 点击小框高亮</span></summary>'+
-        '<div class="tb-bar"><button onclick="treeToggleAll2(\'tree-'+ci+'\',this)">⊖ 全部收起</button></div>'+
+        '<div class="tb-bar"><button onclick="treeToggleAll2(\'tree-'+ci+'\',this)">⊖ 全部收起</button><button onclick="treeEditMode(\'tree-'+ci+'\',this)">✎ 编辑</button></div>'+
         '<div class="ktree" id="tree-'+ci+'"></div></details>';
       if(hasSecs) Object.keys(SM).forEach(function(sn2, si2){
         html += '<details class="tree-blk" id="treeSecBlk-'+ci+'-'+si2+'"><summary>📗 第'+cnNum(si2+1)+'节 '+esc(sn2)+' · 细则导图<span class="tb-hint">▸点开看这一小节的考点</span></summary>'+
-          '<div class="tb-bar"><button onclick="treeToggleAll2(\'treeSec-'+ci+'-'+si2+'\',this)">⊖ 全部收起</button></div>'+
+          '<div class="tb-bar"><button onclick="treeToggleAll2(\'treeSec-'+ci+'-'+si2+'\',this)">⊖ 全部收起</button><button onclick="treeEditMode(\'treeSec-'+ci+'-'+si2+'\',this)">✎ 编辑</button></div>'+
           '<div class="ktree" id="treeSec-'+ci+'-'+si2+'"></div></details>';
       });
     }
     html += '</div>';
   });
   html += '</div><div class="mm-foot"><button class="big-btn primary" onclick="goPracticeSubject(\''+subject+'\')">📚 去刷本科目真题</button>'+
+    '<button class="big-btn" style="background:#fff7ed;border:1px solid #fdba74;color:#9a3412" onclick="copyEditLog()">📋 复制修改日志</button>'+
     '<span style="font-size:12px;color:#999">分值为 2022-2025 年 514 道真题统计的参考值，未考≠绝对不考</span></div></div>';
   m.innerHTML = html;
   m.style.display = 'flex';
