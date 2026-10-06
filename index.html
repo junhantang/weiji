@@ -314,6 +314,7 @@ mark.trap { background:#fff1a8; color:#a16207; padding:0 2px; border-radius:3px;
 
 
 
+
 /*BAKE_CSS_S*/html.has-prog #qCard[data-bake]{display:none}/*BAKE_CSS_E*/
 </style>
 <!--VIDEO_REF_START-->
@@ -1169,6 +1170,25 @@ function nbTermOk(term, hit){
   if(/(的是|包括|分为|属于|不包括|除外|需要|注意|如下|可见|有$)/.test(term)) return false;  // 动词性词尾
   if(/^(其|该|本|此|这|那|上述|以上|以下|其它|其他|应当|可以|能|会|要|应)/.test(term)) return false; // 指代词/助动词开头
   if(/[的之和与等是在了为有及其]/.test(term.slice(-1))) return false;   // 以虚词收尾 = 句子碎片
+  /* 2026-10-06 二轮收紧：考点节点标题常是「无标点整句」（「舌下腺分泌受面神经支配」「皮质脊髓束是脑最大的联络纤维」），
+     上面那条标点闸抓不到 → 再加 长度闸 + 句法闸。测过：真术语（抗肾小球基底膜抗体 9 字/慢性阻塞性肺疾病 8 字）不受影响。 */
+  if(term.length > 9) return false;                                    // 真术语极少超过 9 字
+  if(/的|与|及|或|和/.test(term)) return false;                         // 句内连接词 = 一句话，不是一个词
+  if(term.length >= 8 && /是|称|叫|含|有|在|受|既|又|过|反比|正比|依赖|维持|损害|受损|范围/.test(term)) return false;
+  if(/^(图|表)\d/.test(term)) return false;                             // OCR 残留（「图1115在周围部」）
+  if(term.indexOf('要点') >= 0 || term.indexOf('未归入') >= 0) return false;  // 「讲义要点/综合要点」是兜底节点名，不是知识点
+  /* 2026-10-06 三轮：考点标题里有大量 6~7 字的「截断小句」（「是第5对脑神经」「腺垂体由远侧部」「白质中凡起止」「平静呼吸时」），
+     上面两闸按 8 字划线，漏了这些。这里按「句首虚/动词 + 句尾虚词 + 内含句法字」补，且都带长度门槛，避免误伤真术语
+     （对比：肝损伤 3 字 / 最大通气量 5 字 / 自由基 3 字 / 被动免疫 4 字 均不受影响）。 */
+  if(/^(是|由|凡|通常|若|如|则|即|也|都|须|将|往)/.test(term)) return false;
+  if(/^(管理|注射|解析|答案|题目|选项|题干)/.test(term)) return false;
+  if(term.length >= 4 && /[时中者]$/.test(term)) return false;
+  if(term.length >= 4 && /(最大|最小|最多|最少)$/.test(term)) return false;
+  if(term.length >= 6 && /[是由通常在含既又凡把将让使给对向往从受]/.test(term)) return false;
+  if(term.length >= 6 && /(损伤|受损|损害|起止|增多|减少|位于|称为|管理|注射)$/.test(term)) return false;
+  if(/^(为什么|怎么|怎样|什么|如何)$/.test(term)) return false;          // 疑问词
+  if(/(不能|不是|不会|没有|无法)/.test(term)) return false;             // 否定小句（「普萘洛尔不能用于」）
+  if(/^\d/.test(term)) return false;                                   // 数字开头 = 题干截断（「3代谢变化」「5神经核在中枢部」）
   if(term.length === 2 && !hit) return false;                          // 2 字词必须真在题里出现
   return true;
 }
