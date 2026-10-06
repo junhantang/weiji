@@ -3029,6 +3029,8 @@ function mmLocBar(subject, q, r){
   let h = '<div class="ml-hd">📍 本题定位：<span class="ml-path">' +
     (r.best ? esc(mmPathText(r.best)) : '（没找到可信的知识点）') + '</span>' +
     '<span class="ml-conf ' + (r.conf === 'high' ? '' : r.conf === 'mid' ? 'mid' : 'low') + '">置信度 ' + cn + '</span></div>';
+  /* 2026-10-06 用户要求：候选/提示默认折叠，定位条只留「判断定位是否正确」，点「📋 查看候选」才展开 */
+  h += '<div id="mlMore" style="display:none">';
   if(r.conf === 'low' || r.conf === 'none'){
     h += '<div class="ml-tip">这一跳把握不大（分差 ' + (r.margin || 0) + '），已先按最可能的节点定位；' +
          '不对就点下面候选，或点「❌ 定位错了」：</div>';
@@ -3038,9 +3040,10 @@ function mmLocBar(subject, q, r){
   } else {
     h += '<div class="ml-tip">定位对不对？点一下就记进日志（发给我，我据此调整定位算法）。</div>';
   }
+  h += '</div>';
   h += '<div class="ml-btns">' +
     (r.best ? '<button onclick="mmFeedback(1)">✅ 定位正确</button><button onclick="mmFeedback(0)">❌ 定位错了</button>' : '') +
-    '<button onclick="mmShowCands()">📋 换一个候选</button></div>';
+    '<button onclick="mmToggleMore(this)">📋 查看候选</button></div>';
   bar.innerHTML = h;
   bar.style.display = 'block';
   bar.__r = r; bar.__subj = subject; bar.__q = q;
@@ -3117,9 +3120,11 @@ function mmPickCand(i){
   toast('📍 已跳到你选的节点，并记进日志');
   renderFixList();
 }
-function mmShowCands(){
-  const bar = document.getElementById('mmLocBar'); if(!bar || !__MM_R) return;
-  mmLocBar(window.__mmSubject, curQ, Object.assign({}, __MM_R, { conf: 'low' }));
+function mmToggleMore(btn){
+  const d = document.getElementById('mlMore'); if(!d) return;
+  const show = d.style.display === 'none';
+  d.style.display = show ? 'block' : 'none';
+  if(btn) btn.textContent = show ? '▴ 收起候选' : '📋 查看候选';
 }
 /* ============ 题目纠错（错题纠错闭环）============ */
 function qReport(){
@@ -3212,7 +3217,6 @@ function openMindmap(subject, q){
   if(!m){ m = document.createElement('div'); m.id='mmModal'; m.className='mm-modal'; document.body.appendChild(m); }
   let html = '<div class="mm-box"><div class="mm-head"><h2>🧠 '+subject+' · 知识思维导图</h2>'+scoreBadge(d.score)+
     '<button class="mm-close" onclick="closeMindmap()">&times;</button></div>'+
-    '<div style="padding:10px 20px 0;font-size:12.5px;color:#4f6ef7">💡 每个知识点是一个独立小框，点击查看知识树 + 相关真题 + AI详解；黄色框 = 历年考过；🌳 标记章节已升级新版树状导图</div>'+
     '<div class="mm-body" id="mmBody">';
   d.chaps.forEach((c,ci)=>{
     const hasTree = TREEMAP[subject] && TREEMAP[subject][c.n];
@@ -3224,11 +3228,11 @@ function openMindmap(subject, q){
     if(hasTree){
       const SM = (typeof SECMAP !== 'undefined') && SECMAP[subject] && SECMAP[subject][c.n];
       const hasSecs = !!(SM && Object.keys(SM).length);
-      html += '<details class="tree-blk" id="treeBlk-'+ci+'" open><summary>🌳 '+(hasSecs?'本章大纲（先看骨架）':'树状知识导图（新版）')+'<span class="tb-hint">▸可折叠 · 点击小框高亮</span></summary>'+
+      html += '<details class="tree-blk" id="treeBlk-'+ci+'" open><summary>🌳 '+(hasSecs?'本章大纲（先看骨架）':'树状知识导图（新版）')+'</summary>'+
         '<div class="tb-bar"><button onclick="treeToggleAll2(\'tree-'+ci+'\',this)">⊖ 全部收起</button><button onclick="treeEditMode(\'tree-'+ci+'\',this)">✎ 编辑</button></div>'+
         '<div class="ktree" id="tree-'+ci+'"></div></details>';
       if(hasSecs) Object.keys(SM).forEach(function(sn2, si2){
-        html += '<details class="tree-blk" id="treeSecBlk-'+ci+'-'+si2+'"><summary>📗 第'+cnNum(si2+1)+'节 '+esc(sn2)+' · 细则导图<span class="tb-hint">▸点开看这一小节的考点</span></summary>'+
+        html += '<details class="tree-blk" id="treeSecBlk-'+ci+'-'+si2+'"><summary>📗 第'+cnNum(si2+1)+'节 '+esc(sn2)+' · 细则导图</summary>'+
           '<div class="tb-bar"><button onclick="treeToggleAll2(\'treeSec-'+ci+'-'+si2+'\',this)">⊖ 全部收起</button><button onclick="treeEditMode(\'treeSec-'+ci+'-'+si2+'\',this)">✎ 编辑</button><button class="tb-back" onclick="backToOutline(\'tree-'+ci+'\')">↑ 回大纲</button></div>'+
           '<div class="ktree" id="treeSec-'+ci+'-'+si2+'"></div></details>';
       });
@@ -3236,7 +3240,6 @@ function openMindmap(subject, q){
     html += '</div>';
   });
   html += '</div><div class="mm-foot"><button class="big-btn primary" onclick="goPracticeSubject(\''+subject+'\')">📚 去刷本科目真题</button>'+
-    '<button class="big-btn" style="background:#fff7ed;border:1px solid #fdba74;color:#9a3412" onclick="copyEditLog()">📋 复制修改日志</button>'+
     '<span style="font-size:12px;color:#999">分值为 2022-2025 年 514 道真题统计的参考值，未考≠绝对不考</span></div></div>';
   m.innerHTML = html;
   m.style.display = 'flex';
