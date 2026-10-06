@@ -1135,6 +1135,8 @@ function nbTermOk(term, hit){
   if(NAME_STOP[term] || NB_STOP2[term]) return false;
   if(/^\d+$/.test(term)) return false;
   if(/^考查/.test(term)) return false;
+  /* 题干残留/虚词开头的句子碎片（「下列选项中」「在人类」这类），2026-10-06 用户截图反馈 */
+  if(/^(下列|选项|以上|以下|其中|关于|对于|属于|由于|因此|所以|引起|导致|主要|首先|其次|此外|同时|通过|根据|按照|除了|以及|但是|然而|因为|如果|在|把|被|使|从|向|于)/.test(term)) return false;
   if(/[的之和与等是在了为有及其]/.test(term.slice(-1))) return false;   // 以虚词收尾 = 句子碎片
   if(term.length === 2 && !hit) return false;                          // 2 字词必须真在题里出现
   return true;
@@ -3215,7 +3217,7 @@ function openMindmap(subject, q){
   window.__mmSubject = subject;   // 编辑日志要按科目定位底层数据
   let m = document.getElementById('mmModal');
   if(!m){ m = document.createElement('div'); m.id='mmModal'; m.className='mm-modal'; document.body.appendChild(m); }
-  let html = '<div class="mm-box"><div class="mm-head"><h2>🧠 '+subject+' · 知识思维导图</h2>'+scoreBadge(d.score)+
+  let html = '<div class="mm-box"><div class="mm-head"><h2>🧠 '+subject+' · 思维导图</h2>'+scoreBadge(d.score)+
     '<button class="mm-close" onclick="closeMindmap()">&times;</button></div>'+
     '<div class="mm-body" id="mmBody">';
   d.chaps.forEach((c,ci)=>{
