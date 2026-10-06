@@ -1804,20 +1804,46 @@ function toggleFav(){
   LS.set('favs', favs); refreshStats();
 }
 
+/* ⑦ 答题卡：题池不变时只改变化的那几格（2026-10-06 性能）
+   —— 原来每次翻题都重建 N 个格子（4321 题 = 4321 个 DOM 节点 = 全页 91%），手机端每翻一题卡 60~100ms。
+      改为：同一套题池只做 class 增量更新；题池换了（换科目/错题重练）才整块重建。 */
+let __cardPool = null, __cardCells = null, __cardCls = null, __cardCur = -1;
 function renderAnswerCard(){
   const grid = document.getElementById('answerCard');
-  grid.innerHTML = '';
   const total = pool.length, done = pool.filter(q=>answers[q.u]).length;
-  document.getElementById('answerCardInfo').textContent = total ? `已做 ${done}/${total}` : '';
+  const info = document.getElementById('answerCardInfo');
+  if(info) info.textContent = total ? `已做 ${done}/${total}` : '';
+  const reusable = (__cardPool === pool && __cardCells && __cardCells.length === total
+                    && grid.children.length === total);
+  if(reusable){
+    if(__cardCur >= 0 && __cardCells[__cardCur]) __cardCells[__cardCur].classList.remove('cur');
+    for(let i = 0; i < total; i++){
+      const rec = answers[pool[i].u];
+      const cls = rec ? (rec.ok ? 'done-ok' : 'done-bad') : '';
+      if(__cardCls[i] !== cls){
+        __cardCls[i] = cls;
+        __cardCells[i].className = 'gcell' + (cls ? ' ' + cls : '');
+      }
+    }
+    if(__cardCells[pos]) __cardCells[pos].classList.add('cur');
+    __cardCur = pos;
+    return;
+  }
+  grid.innerHTML = '';
+  const cells = [], clss = [];
   pool.forEach((q, i)=>{
     const c = document.createElement('div');
-    c.className = 'gcell' + (answers[q.u] ? (answers[q.u].ok?' done-ok':' done-bad') : '');
+    const cls = answers[q.u] ? (answers[q.u].ok ? 'done-ok' : 'done-bad') : '';
+    c.className = 'gcell' + (cls ? ' ' + cls : '');
     if(i===pos) c.classList.add('cur');
     c.textContent = i+1;
     c.title = q.s + ' · ' + q.t;
     c.onclick = ()=>{ pos = i; wrongPractice=false; showQ(); scrollToQuestion(); };
+    cells.push(c);
+    clss.push(cls);
     grid.appendChild(c);
   });
+  __cardPool = pool; __cardCells = cells; __cardCls = clss; __cardCur = pos;
 }
 
 /* ============ 错题重练 ============ */
