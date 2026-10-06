@@ -308,6 +308,9 @@ mark.trap { background:#fff1a8; color:#a16207; padding:0 2px; border-radius:3px;
 .copy-btn{margin-left:auto;border:1px solid #1d4ed8;background:#fff;color:#1d4ed8;border-radius:8px;padding:3px 10px;font-size:12px;cursor:pointer}
 .copy-btn:hover{background:#1d4ed8;color:#fff}
 /*VIDEO_REF_CSS_END*/
+
+/*BAKE_CSS_S*/html.has-prog #qCard[data-bake]{display:none}/*BAKE_CSS_E*/
+
 /* ===== 手机版专属样式 v5 ===== */
 @media (max-width: 768px) {
   body { padding: 8px; font-size: 15px; }
@@ -823,7 +826,11 @@ const TEACHER_NOTE = JSON.parse(document.getElementById('d_TEACHER_NOTE').textCo
 }</script>
 <script>
 const VIDEO_REF = JSON.parse(document.getElementById('d_VIDEO_REF').textContent);;</script>
-<!--VIDEO_REF_END--></head>
+<!--VIDEO_REF_END-->
+<!--BAKE_GUARD_S-->
+<script>try{var _ba=JSON.parse(localStorage.getItem('wj2_answers')||'{}');if(_ba&&Object.keys(_ba).length){document.documentElement.className+=' has-prog';}}catch(e){}</script>
+<!--BAKE_GUARD_E-->
+</head>
 <body>
 <div class="container">
   <div class="header">
@@ -872,10 +879,10 @@ const VIDEO_REF = JSON.parse(document.getElementById('d_VIDEO_REF').textContent)
       </div>
       <div id="qSearchOut"></div>
       <div class="progress-line"><div id="pProg" style="width:0%"></div></div>
-      <div id="qCard" class="hidden">
-        <div class="q-top" id="qBadges"></div>
-        <div class="q-text" id="qText"><span class="boot-hint">⏳ 正在加载题库，请稍候…</span></div>
-        <div id="qOpts"></div>
+      <div id="qCard" data-bake="1">
+        <div class="q-top" id="qBadges"><span class="badge type">判断题</span><span class="badge subj">解剖学</span><span class="badge src">2025.11.16</span></div>
+        <div class="q-text" id="qText" data-u="J1">舌下腺分泌受面神经支配。</div>
+        <div id="qOpts"><button class="opt-btn">✓ 正确</button><button class="opt-btn">✗ 错误</button></div>
         <div id="qExp" class="exp-box hidden"></div>
         <div class="row-actions" style="margin-top:14px">
           <button class="big-btn ghost" onclick="step(-1)">← 上一题</button>
@@ -1589,6 +1596,7 @@ function highlightTrap(t){
 
 function showQ(){
   curQ = pool[pos]; answered = !!answers[curQ.u]; multiSel = new Set();
+  document.documentElement.classList.remove('has-prog');
   document.getElementById('qCard').classList.remove('hidden');
   const b = document.getElementById('qBadges');
   b.innerHTML = `<span class="badge type">${curQ.t}</span><span class="badge subj">${curQ.s}</span><span class="badge src">${curQ.y}</span>` + (curQ.d?`<span class="badge doubt">⚠️ 答案存疑</span>`:'') + ((typeof QFIX!=='undefined' && QFIX.some(f=>f.u===curQ.u))?`<span class="badge doubt">🚩 已反馈</span>`:'');
