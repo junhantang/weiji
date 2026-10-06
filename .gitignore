@@ -3,5 +3,6 @@
 
 # 但保留这两个
 !index.html
+!mobile.html
 !README.md
 !.gitignore
