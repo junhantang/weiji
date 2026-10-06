@@ -1,8 +1,7 @@
 ﻿# 忽略所有文件
 *
 
-# 但保留这两个
+# 但保留这几个（2026-10-06 一版化：已取消 mobile.html —— 桌面/手机共用 index.html）
 !index.html
-!mobile.html
 !README.md
 !.gitignore
