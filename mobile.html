@@ -316,6 +316,7 @@ mark.trap { background:#fff1a8; color:#a16207; padding:0 2px; border-radius:3px;
 
 
 
+
 /*BAKE_CSS_S*/html.has-prog #qCard[data-bake]{display:none}/*BAKE_CSS_E*/
 
 /* ===== 手机版专属样式 v5 ===== */
@@ -1237,6 +1238,7 @@ function nbTermOk(term, hit){
   if(/^(为什么|怎么|怎样|什么|如何)$/.test(term)) return false;          // 疑问词
   if(/(不能|不是|不会|没有|无法)/.test(term)) return false;             // 否定小句（「普萘洛尔不能用于」）
   if(/^\d/.test(term)) return false;                                   // 数字开头 = 题干截断（「3代谢变化」「5神经核在中枢部」）
+  if(/\d/.test(term) && term.length >= 5) return false;                // 长串里混数字 = 题库原文截断（「白细胞总数10L」「寿命约120天」）
   if(term.length === 2 && !hit) return false;                          // 2 字词必须真在题里出现
   return true;
 }
