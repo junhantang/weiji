@@ -41,6 +41,11 @@ body { font-family:"Microsoft YaHei","PingFang SC",sans-serif; background:#f0f2f
 .qloc b { color:#5b21b6; }
 .qloc .cnt { background:#ede9fe; color:#6d28d9; border-radius:9px; padding:1px 7px; font-weight:700; font-size:11.5px; }
 .qloc .dim { color:#8a7fb5; }
+/* 交叉学科切换片：全科 / 主章 / 相关章，点了就改名词解释与思维导图的锁定范围 */
+.qchip { cursor:pointer; border:1px solid #ddd6fe; background:#fff; color:#6d28d9;
+  border-radius:11px; padding:2px 9px; font-size:11.5px; white-space:nowrap; user-select:none; }
+.qchip:hover { background:#f5f3ff; border-color:#a78bfa; }
+.qchip.on { background:#6d28d9; border-color:#6d28d9; color:#fff; font-weight:700; }
 .badge.doubt { background:#fff7ed; color:#d97706; }
 .q-text { font-size:16.5px; line-height:1.75; color:#222; margin-bottom:16px; font-weight:600; }
 .opt-btn { display:block; width:100%; text-align:left; padding:12px 14px; margin-bottom:9px; border:2px solid #e8eaf0; border-radius:11px; background:#fff; font-size:14.5px; line-height:1.55; cursor:pointer; transition:.13s; }
@@ -382,6 +387,7 @@ mark.trap { background:#fff1a8; color:#a16207; padding:0 2px; border-radius:3px;
   .mobile-export { text-align: center; margin: 12px 0; padding: 10px; background: #f0f2f5; border-radius: 10px; }
 }
 /*ADAPTIVE_CSS_E*/
+
 
 
 
@@ -1133,6 +1139,10 @@ const QCHAPTER = JSON.parse(document.getElementById('d_QCHAPTER').textContent);;
 function qChap(q){ return (typeof QCHAPTER !== 'undefined' && QCHAPTER[q.u]) || ''; }
 /* 章热度：某一科某一章一共收了多少道题（章节定位用；惰性算一次） */
 let _CHAPQ = null;
+/* 交叉学科用：本题「锁定」到哪一章。null = 跟随自动判定。
+   像免疫学这种章与章咬得很紧的科目，自动定位只给一章会漏掉关联章节，
+   所以允许手动切到相关章，或放开到全科。 */
+let QCHAP_LOCK = null;
 function chapQCount(subj, chap){
   if(!chap) return 0;
   if(!_CHAPQ){
@@ -1303,6 +1313,8 @@ function nbHeadTerm(t, maxLen){
 }
 /* 本题属于哪一章（优先 QCHAPTER，其次题干/解析命中章名，最后取考频最高的章） */
 function nbPickChap(q, subj){
+  /* 用户手动锁定的章优先（交叉学科：允许切到相关章 / 放开全科） */
+  if(QCHAP_LOCK && (TREEMAP[subj] || {})[QCHAP_LOCK]) return QCHAP_LOCK;
   const chap = qChap(q);
   const tm = TREEMAP[subj] || {};
   if(chap && tm[chap]) return chap;
@@ -1875,6 +1887,28 @@ function scrollToExp(){
 
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function copyVref(u){ const v=VIDEO_REF[u]; if(!v) return; const txt='▶ 视频解析：'+v.vol+' @ '+v.ts; navigator.clipboard?.writeText(txt).then(()=>toast('已复制视频定位：'+txt)).catch(()=>{ const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('已复制：'+txt); }); }
+/* 与本题相关的其他章（交叉学科用）：在题干/选项/解析里直接命中了别的章名，
+   说明这题跨章——免疫学、生理学这类科目很常见，只锁一章会漏。 */
+let _REL_CHAPS = [];   // [0]=自动判定的主章，其后是相关章
+let _EXP_REC = null;   // 最近一次渲染解析用的作答记录，切章后要原样重渲染
+function relChaps(q, subj, main){
+  /* 防御式：测试沙箱不注入 TREEMAP，直接引用会 ReferenceError（踩过两次） */
+  const tm = (typeof TREEMAP !== 'undefined' && TREEMAP) ? (TREEMAP[subj] || {}) : {};
+  const txt = (q.q || '') + ' ' + (q.e || '') + ' '
+    + (q.o ? Object.keys(q.o).map(function(k){ return q.o[k]; }).join(' ') : '');
+  const out = [];
+  Object.keys(tm).forEach(function(c){
+    if(c === main || out.length >= 4) return;
+    if(txt.indexOf(c) >= 0) out.push(c);
+  });
+  return out;
+}
+/* 切换锁定的章：i = -1 表示放开到全科，其余为 _REL_CHAPS 下标 */
+function setChapLock(i){
+  QCHAP_LOCK = (i === -1) ? null : (_REL_CHAPS[i] || null);
+  if(curQ && typeof showExp === 'function') showExp(curQ, _EXP_REC || { sel: '', ok: false });
+}
+
 function showExp(q, rec){
   const box = document.getElementById('qExp');
   if(!box){ console.error('showExp: 找不到 #qExp'); return; }
@@ -1885,12 +1919,33 @@ function showExp(q, rec){
     ? '<span style="color:#7c3aed">📖 学习模式</span>　正确答案：' + esc(q.a) + '（只看不记，不影响成绩与错题本）'
     : (rec.ok ? '<span style="color:#16a34a">✔ 回答正确</span>' : '<span style="color:#e11d48">✘ 回答错误</span>')
       + '　正确答案：' + q.a + (q.t !== '判断题' ? '（你的答案：' + rec.sel + '）' : '');
+  _EXP_REC = rec || { sel: '', ok: false };
   const _sj = (typeof qSubj === 'function') ? qSubj(q) : (q.s || '');
   const _ch = (typeof qChap === 'function') ? qChap(q) : '';
-  const _loc = '<div class="qloc">🎯 考点定位：<b>' + esc(_sj) + (_ch ? ' · ' + esc(_ch) : '') + '</b>'
-    + (_ch ? '<span class="cnt">本章共 ' + ((typeof chapQCount === 'function') ? chapQCount(_sj, _ch) : 0) + ' 道真题</span>'
-           : '<span class="cnt dim">章待定</span>')
-    + '<span class="dim">名词解释 / 思维导图 已按此范围锁定</span></div>';
+  /* 交叉学科：主章 + 相关章，做成可点的切换片 */
+  _REL_CHAPS = [];
+  if(_ch) _REL_CHAPS.push(_ch);
+  ((typeof relChaps === 'function') ? relChaps(q, _sj, _ch) : []).forEach(function(c){ _REL_CHAPS.push(c); });
+  /* 防御式：测试沙箱只抽取 showExp 函数体，QCHAP_LOCK 是外部全局，直接读会 ReferenceError */
+  const _lk = (typeof QCHAP_LOCK !== 'undefined') ? QCHAP_LOCK : null;
+  const _tmL = (typeof TREEMAP !== 'undefined' && TREEMAP) ? (TREEMAP[_sj] || {}) : {};
+  const _lock = (_lk && _tmL[_lk]) ? _lk : _ch;
+  let _cntFn = (typeof chapQCount === 'function') ? chapQCount : function(){ return 0; };
+  let _chips = '';
+  if(_REL_CHAPS.length){
+    _chips = '<span class="qchip' + (_lock ? '' : ' on') + '" onclick="setChapLock(-1)" title="放开到整科">🌐 全科</span>'
+      + _REL_CHAPS.map(function(c, i){
+          return '<span class="qchip' + (c === _lock ? ' on' : '') + '" onclick="setChapLock(' + i + ')"'
+            + ' title="' + esc(c) + '（本章共 ' + ((typeof chapQCount === 'function') ? chapQCount(_sj, c) : 0) + ' 道真题）">'
+            + esc(c) + '</span>';
+        }).join('');
+  }
+  const _loc = '<div class="qloc">🎯 考点定位：<b>' + esc(_sj) + (_lock ? ' · ' + esc(_lock) : '') + '</b>'
+    + (_lock ? '<span class="cnt">本章共 ' + ((typeof chapQCount === 'function') ? chapQCount(_sj, _lock) : 0) + ' 道真题</span>'
+             : '<span class="cnt dim">未限定（全科）</span>')
+    + '<span class="dim">' + (_lock ? '名词解释 / 思维导图 已锁定本章' : '名词解释 / 思维导图 按全科给') + '</span></div>'
+    + (_chips ? '<div class="qloc" style="margin-top:-4px">🔗 切范围：' + _chips
+        + (_REL_CHAPS.length > 1 ? '<span class="dim">（这题还涉及别的章，可切换）</span>' : '') + '</div>' : '');
   box.innerHTML = `<div class="ans">${head}</div>` + _loc +
     (q.e ? esc(q.e) : '（本题暂无解析）') +
     (VIDEO_REF[q.u] ? `<div class="vref"><span class="vref-ico">▶</span> 视频解析：<b>${VIDEO_REF[q.u].vol}</b> @ ${VIDEO_REF[q.u].ts}<button class="copy-btn" onclick="copyVref('${q.u}')">复制</button></div>` : '') +
@@ -1899,7 +1954,7 @@ function showExp(q, rec){
       '<details class="tnote"><summary>🎓 老师思路（视频讲解转写）<span class="tb-hint">▸ 点开看老师怎么讲的</span></summary>' +
       '<div class="tnote-body">' + esc(TEACHER_NOTE[q.u]) + '</div>' +
       '<div class="tnote-tip">※ 由讲解视频自动转写，可能有同音错字或断句偏差，听懂思路即可</div></details>' : '') +
-    `<button class="ai-btn" onclick="openMindmap(qSubj(curQ), curQ)">🧠 本章思维导图${_ch?'（'+esc(_ch)+'）':''}</button><button class="ai-btn" onclick="openQNames()">📖 名词解释${_ch?'（锁定本章）':''}</button><button class="ai-btn" onclick="qReport()">⚠️ 纠错</button><button class="ai-btn" onclick="aiExplain()">🤖 AI 深度解析</button><button class="ai-btn" onclick="toggleNote()">✎ 笔记${notes[curQ.u]?" 📝":""}</button><div id="noteArea" class="note-area hidden"></div><span id="aiOut" style="display:block;margin-top:8px;font-size:13px;color:#555"></span>`;
+    `<button class="ai-btn" onclick="openMindmap(qSubj(curQ), curQ)">🧠 ${_lock?'本章思维导图（'+esc(_lock)+'）':'全科思维导图'}</button><button class="ai-btn" onclick="openQNames()">📖 名词解释${_lock?'（锁定'+esc(_lock)+'）':'（全科）'}</button><button class="ai-btn" onclick="qReport()">⚠️ 纠错</button><button class="ai-btn" onclick="aiExplain()">🤖 AI 深度解析</button><button class="ai-btn" onclick="toggleNote()">✎ 笔记${notes[curQ.u]?" 📝":""}</button><div id="noteArea" class="note-area hidden"></div><span id="aiOut" style="display:block;margin-top:8px;font-size:13px;color:#555"></span>`;
   }catch(err){
     console.error('showExp 出错：', err);
     box.innerHTML = '<div class="ans">正确答案：' + (q.a || '') + '</div>' +
