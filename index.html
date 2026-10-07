@@ -335,6 +335,17 @@ mark.trap { background:#fff1a8; color:#a16207; padding:0 2px; border-radius:3px;
   .st .vl { font-size: 16px; }
   .st .lb { font-size: 10px; }
   .filters select, .filters button, .filters label { padding: 8px 10px; font-size: 12.5px; }
+  /* —— 筛选区排版（2026-10-07 用户截图圈出：flex 自由换行 → 三行锯齿、右侧留白）——
+     改成 2 列网格：科目/章节、题型/模式 各占一列，开始按钮独占整行。桌面端不受影响。 */
+  .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+  .filters select, .filters button { width: 100%; min-width: 0; }
+  .filters button.primary { grid-column: 1 / -1; min-height: 44px; font-size: 14.5px; }
+  /* 模式提示条：浅底卡片化，不再是一行悬空小字 */
+  .mode-tip { margin: 2px 0 10px; padding: 8px 11px; background: #f6f8fc; border: 1px solid #e8ecf4;
+              border-radius: 9px; font-size: 12px; word-break: break-word; }
+  /* 搜题行：输入框独占一行，搜题/清空并排补齐（原布局输入框被压扁、按钮错位） */
+  #qSearchKw { flex: 1 1 100%; min-width: 0; }
+  #qSearchKw ~ .ai-btn { flex: 1; margin-top: 0; min-height: 40px; padding: 8px 12px; font-size: 13px; }
   .list-item { padding: 11px 12px; font-size: 13px; }
   input, textarea, select { font-size: 16px; }
   .grid-card { grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)); gap: 5px; }
@@ -364,6 +375,7 @@ mark.trap { background:#fff1a8; color:#a16207; padding:0 2px; border-radius:3px;
   .mobile-export { text-align: center; margin: 12px 0; padding: 10px; background: #f0f2f5; border-radius: 10px; }
 }
 /*ADAPTIVE_CSS_E*/
+
 
 
 
