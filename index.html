@@ -55,6 +55,13 @@ body { font-family:"Microsoft YaHei","PingFang SC",sans-serif; background:#f0f2f
 .gcell.done-ok { background:#dcfce7; color:#15803d; }
 .gcell.done-bad { background:#ffe4e6; color:#be123c; }
 .gcell.cur { outline:3px solid #4f6ef7; }
+/* 2026-10-07：答题卡把「本次练习」与「历史上做过」分开显示 */
+.gcell.was-done { background:#e8ecf6; color:#8a97ab; }
+.gcell.review { background:#eef1ff; color:#4f6ef7; }
+.badge.study { background:#f5f0ff; color:#7c3aed; }
+.badge.review { background:#fdf4ff; color:#a21caf; }
+.mode-tip { font-size:12px; color:#8a97ab; margin:7px 2px 0; line-height:1.65; }
+.mode-tip b { color:#4f6ef7; }
 .sec-title { font-size:14px; font-weight:700; color:#333; margin:16px 0 8px; display:flex; justify-content:space-between; align-items:center; }
 .list-item { padding:13px 14px; border:2px solid #eef0f5; border-radius:11px; margin-bottom:9px; font-size:14px; }
 .list-item .li-q { line-height:1.6; margin-bottom:6px; }
@@ -357,6 +364,7 @@ mark.trap { background:#fff1a8; color:#a16207; padding:0 2px; border-radius:3px;
   .mobile-export { text-align: center; margin: 12px 0; padding: 10px; background: #f0f2f5; border-radius: 10px; }
 }
 /*ADAPTIVE_CSS_E*/
+
 
 
 
@@ -879,12 +887,14 @@ const VIDEO_REF = JSON.parse(document.getElementById('d_VIDEO_REF').textContent)
         <select id="fType">
           <option value="">全部题型</option><option>判断题</option><option>单选题</option><option>多选题</option>
         </select>
-        <select id="fMode">
+        <select id="fMode" onchange="updateModeTip()">
           <option value="seq">顺序刷题</option><option value="rand">随机刷题</option>
           <option value="un-done">只刷未做</option><option value="wrong-first">错题优先</option>
+          <option value="study">📖 学习模式（直接看答案）</option>
         </select>
         <button class="primary" onclick="startPractice()">开始 / 应用</button>
       </div>
+      <div class="mode-tip" id="modeTip"></div>
       <div class="row-actions" style="margin-top:8px">
         <input id="qSearchKw" class="name-search" placeholder="🔍 全库搜题（题干 / 解析关键词，回车搜索）" onkeydown="if(event.key==='Enter')doSearchQ()">
         <button class="ai-btn" onclick="doSearchQ()">搜题</button>
@@ -900,6 +910,7 @@ const VIDEO_REF = JSON.parse(document.getElementById('d_VIDEO_REF').textContent)
         <div class="row-actions" style="margin-top:14px">
           <button class="big-btn ghost" onclick="step(-1)">← 上一题</button>
           <button class="big-btn primary" id="nextBtn" onclick="step(1)">下一题 →</button>
+          <button class="big-btn ghost" id="redoBtn" onclick="redoCur()" title="重新作答本题（快捷键 R）">🔁 重做本题</button>
           <span class="fav-star" id="favStar" onclick="toggleFav()">☆</span>
         </div>
       </div>
@@ -1578,6 +1589,32 @@ function switchTab(name){
 
 /* ============ 刷题 ============ */
 let pool = [], pos = 0, curQ = null, multiSel = new Set(), answered = false;
+let wrongPractice = false;      // 错题重练态（2026-10-07 提到这里声明，避免下面 startPractice 引用时踩 TDZ）
+
+/* 🔴 2026-10-07 修复「做过的题直接显示答案」（用户日志 Z017 上报）
+   旧代码 showQ() 里 `answered = !!answers[curQ.u]` 直接读 localStorage 的历史作答，
+   于是顺序/随机刷题一翻到以前做过的题，选项就被锁成对错色、解析自动铺开 —— 等于没法重做。
+   现在拆成两层：
+     · answers   = 历史成绩（仍在，供统计/错题本/只刷未做用，**不再决定题面**）
+     · sessionDone = 本次练习的作答（换一次练习就清空，只决定「这题我这轮做过没有」）
+   非学习模式下，每道题都重新出题；答完当轮才显示答案。*/
+let sessionDone = new Set();
+const STUDY_REC = { sel: '', ok: true, study: true };   // 学习模式的「伪作答记录」
+function curMode(){ const e = document.getElementById('fMode'); return e ? e.value : 'seq'; }
+function isStudy(){ return curMode() === 'study'; }
+function newSession(){ sessionDone = new Set(); }
+
+const MODE_TIPS = {
+  'seq':        '按题库顺序刷。<b>以前做过的题会重新出</b>，不会直接显示答案；从上次没做到的地方接着开始。',
+  'rand':       '题池随机打乱。<b>以前做过的题也会重新出</b>，适合检验真实掌握度。',
+  'un-done':    '只出<b>从没做过</b>的题，做过的自动跳过（按历史记录判断）。',
+  'wrong-first':'错题排在最前面。答错自动进错题本，答对（错题重练中）自动移出。',
+  'study':      '📖 <b>学习模式</b>：直接亮出正确答案与解析，用来快速过一遍知识点；<b>不记录成绩、不计入错题本、不影响正确率</b>。'
+};
+function updateModeTip(){
+  const t = document.getElementById('modeTip'); if(!t) return;
+  t.innerHTML = MODE_TIPS[curMode()] || '';
+}
 
 function buildPool(){
   const s = document.getElementById('fSubject').value;
@@ -1612,15 +1649,18 @@ function doSearchQ(){
       '<span class="qs-tag">' + esc(q.s) + '·' + esc(q.t) + '</span>' + esc((q.q || '').slice(0, 60)) + '</div>').join('');
 }
 
-function startPractice(){
+function startPractice(keepSession){
   try{ logEvent('practice_start', { mode: (document.getElementById('fMode')||{}).value, subject: (document.getElementById('fSubject')||{}).value, type: (document.getElementById('fType')||{}).value }); }catch(e){}
   buildPool();
+  if(!keepSession) newSession();   // 🔴 新练习 = 题面全部重置（历史记录不动）
+  wrongPractice = false;           // 别把上一次「错题重练」的语义带进新练习
+  updateModeTip();
   if(!pool.length){ document.getElementById('qCard').classList.add('hidden'); document.getElementById('qEmpty').classList.remove('hidden'); renderAnswerCard(); return; }
   document.getElementById('qEmpty').classList.add('hidden');
-  // 从第一条未做的开始（顺序/错题优先模式）
-  const mode = document.getElementById('fMode').value;
-  if(mode==='seq' || mode==='wrong-first'){
-    let start = pool.findIndex(q=>!answers[q.u]);
+  const mode = curMode();
+  // 顺序/学习模式：接着上次没做到的地方继续；随机/只刷未做/错题优先：从头
+  if(mode==='seq' || mode==='study'){
+    const start = pool.findIndex(q=>!answers[q.u]);
     pos = start >= 0 ? start : 0;
   } else pos = 0;
   showQ();
@@ -1633,32 +1673,45 @@ function highlightTrap(t){
 }
 
 function showQ(){
-  curQ = pool[pos]; answered = !!answers[curQ.u]; multiSel = new Set();
+  curQ = pool[pos];
+  const study = isStudy();
+  /* 🔴 2026-10-07：题面只认「本次练习」的作答状态。
+     非学习模式下，即使这题历史上做过，也照常重新出题（选项可点、不显示答案）。*/
+  const inSession = sessionDone.has(curQ.u);
+  const rec = study ? STUDY_REC : (inSession ? (answers[curQ.u] || { sel: '', ok: true }) : null);
+  answered = !!rec;
+  multiSel = new Set();
   document.documentElement.classList.remove('has-prog');
   document.getElementById('qCard').classList.remove('hidden');
   const b = document.getElementById('qBadges');
-  b.innerHTML = `<span class="badge type">${curQ.t}</span><span class="badge subj">${curQ.s}</span><span class="badge src">${curQ.y}</span>` + (curQ.d?`<span class="badge doubt">⚠️ 答案存疑</span>`:'') + ((typeof QFIX!=='undefined' && QFIX.some(f=>f.u===curQ.u))?`<span class="badge doubt">🚩 已反馈</span>`:'');
+  b.innerHTML = `<span class="badge type">${curQ.t}</span><span class="badge subj">${curQ.s}</span><span class="badge src">${curQ.y}</span>`
+    + (curQ.d?`<span class="badge doubt">⚠️ 答案存疑</span>`:'')
+    + ((typeof QFIX!=='undefined' && QFIX.some(f=>f.u===curQ.u))?`<span class="badge doubt">🚩 已反馈</span>`:'')
+    + (study?`<span class="badge study">📖 学习模式</span>`:'')
+    + (inSession && !study?`<span class="badge review">🔁 本次已做</span>`:'');
   document.getElementById('qText').innerHTML = highlightTrap(curQ.q);
   document.getElementById('favStar').textContent = favs.includes(curQ.u) ? '★' : '☆';
   document.getElementById('qExp').classList.add('hidden');
   document.getElementById('nextBtn').textContent = pos >= pool.length-1 ? '已完成 → 回到开头' : '下一题 →';
-  renderOpts('qOpts', curQ, answered);
-  if(answered) showExp(curQ, answers[curQ.u]);
+  renderOpts('qOpts', curQ, rec);
+  if(rec) showExp(curQ, rec);
   renderAnswerCard();
-  const done = pool.filter(q=>answers[q.u]).length;
+  const done = study ? (pos + 1) : pool.filter(q=>sessionDone.has(q.u)).length;
   document.getElementById('pProg').style.width = (done/Math.max(pool.length,1)*100)+'%';
 }
 
-function renderOpts(divId, q, isDone){
+function renderOpts(divId, q, record){
   const div = document.getElementById(divId);
   div.innerHTML = '';
-  const record = isDone ? answers[q.u] : null;
+  /* record：null = 没做过（可点）；{sel,ok} = 本次做过（锁住、显示对错）；{study:true} = 学习模式（直接亮答案） */
+  const study = !!(record && record.study);
+  if(study) record = { sel: '', ok: true };
   if(q.t === '判断题'){
     [['√','✓ 正确'],['×','✗ 错误']].forEach(([val, txt])=>{
       const btn = document.createElement('button');
       btn.className = 'opt-btn'; btn.textContent = txt;
       if(record){
-        btn.disabled = true;
+        if(!study) btn.disabled = true;
         if(record.sel===val) btn.classList.add(val===q.a?'right':'wrong');
         else if(val===q.a) btn.classList.add('right');
       } else {
@@ -1672,7 +1725,7 @@ function renderOpts(divId, q, isDone){
       const btn = document.createElement('button');
       btn.className = 'opt-btn'; btn.textContent = L + '. ' + q.o[L];
       if(record){
-        btn.disabled = true;
+        if(!study) btn.disabled = true;
         const selSet = new Set(record.sel.split(''));
         if(selSet.has(L)) btn.classList.add([...selSet].join('')===q.a?'right':'wrong');
         else if(q.a.includes(L)) btn.classList.add('right');
@@ -1734,6 +1787,7 @@ function startWrongDrill(onlyDue){
   document.getElementById('fType').value = '';
   pool = us.map(u => BANK.find(q => q.u === u)).filter(Boolean);
   pos = 0; wrongPractice = true;
+  newSession();
   document.getElementById('qEmpty').classList.add('hidden');
   showQ(); scrollToQuestion();
   toast('🔁 错题重练 ' + pool.length + ' 题（答对会自动移出错题本）');
@@ -1742,6 +1796,11 @@ function startWrongDrill(onlyDue){
 function answerQuestion(q, sel, btns, plain){
   const ok = sel === q.a;
   btns.forEach(b=>b.classList.add(ok?'right':'wrong'));
+  /* 答完即锁：防止误点改答；也让「当场答完」和「翻回来重看」长得一模一样
+     （原来只有多选题的「确认答案」会锁，单选/判断答完还能再点，是条老缝） */
+  document.querySelectorAll('#qOpts .opt-btn').forEach(b=>{ b.disabled = true; });
+  const _okb = document.querySelector('#qOpts .big-btn.primary');
+  if(_okb) _okb.remove();
   if(!ok){
     // 标出正确项
     const allBtns = document.querySelectorAll('#qOpts .opt-btn');
@@ -1753,6 +1812,7 @@ function answerQuestion(q, sel, btns, plain){
     }
   }
   answers[q.u] = { sel: sel, ok: ok };
+  sessionDone.add(q.u);        // 2026-10-07：标记「本轮做过」——题面是否显示答案由它决定
   LS.set('answers', answers);
   srUpdate(q.u, ok);
   logEvent('answer', { u: q.u, ok: ok });
@@ -1783,9 +1843,12 @@ function showExp(q, rec){
   if(!box){ console.error('showExp: 找不到 #qExp'); return; }
   box.classList.remove('hidden');
   try{
-  const okTag = rec.ok ? '<span style="color:#16a34a">✔ 回答正确</span>' : '<span style="color:#e11d48">✘ 回答错误</span>';
-  const yourAns = rec.sel==='√'||rec.sel==='×' ? rec.sel : (q.t==='判断题'?rec.sel:rec.sel);
-  box.innerHTML = `<div class="ans">${okTag}　正确答案：${q.a}${q.t!=='判断题'?'（你的答案：'+rec.sel+'）':''}</div>` +
+  const study = !!(rec && rec.study);
+  const head = study
+    ? '<span style="color:#7c3aed">📖 学习模式</span>　正确答案：' + esc(q.a) + '（只看不记，不影响成绩与错题本）'
+    : (rec.ok ? '<span style="color:#16a34a">✔ 回答正确</span>' : '<span style="color:#e11d48">✘ 回答错误</span>')
+      + '　正确答案：' + q.a + (q.t !== '判断题' ? '（你的答案：' + rec.sel + '）' : '');
+  box.innerHTML = `<div class="ans">${head}</div>` +
     (q.e ? esc(q.e) : '（本题暂无解析）') +
     (VIDEO_REF[q.u] ? `<div class="vref"><span class="vref-ico">▶</span> 视频解析：<b>${VIDEO_REF[q.u].vol}</b> @ ${VIDEO_REF[q.u].ts}<button class="copy-btn" onclick="copyVref('${q.u}')">复制</button></div>` : '') +
     (q.d ? '<div class="warn">⚠️ 此题答案存在争议或原题损坏经人工校正，建议以权威教材为准。</div>' : '') +
@@ -1841,7 +1904,18 @@ document.addEventListener('keydown', e => {
   if(e.key === 'ArrowLeft'){ e.preventDefault(); step(-1); return; }
   if(e.key === 'Enter'){ e.preventDefault(); if(answered) step(1); return; }
   if(e.key === 'f' || e.key === 'F'){ toggleFav(); return; }
+  if(e.key === 'r' || e.key === 'R'){ e.preventDefault(); redoCur(); return; }
 });
+
+/* 🔁 重做本题：把当前题在本轮标回「没做过」，题面重新出（历史成绩不动） */
+function redoCur(){
+  if(!curQ) return;
+  if(isStudy()){ toast('学习模式本来就只读不记录，直接看答案就行'); return; }
+  if(!sessionDone.has(curQ.u)){ toast('本题本轮还没作答，直接选答案即可'); return; }
+  sessionDone.delete(curQ.u);
+  showQ();
+  toast('🔁 已重置本题，可重新作答（历史成绩不变）');
+}
 
 function toggleFav(){
   if(!curQ) return;
@@ -1856,16 +1930,25 @@ function toggleFav(){
 let __cardPool = null, __cardCells = null, __cardCls = null, __cardCur = -1;
 function renderAnswerCard(){
   const grid = document.getElementById('answerCard');
-  const total = pool.length, done = pool.filter(q=>answers[q.u]).length;
+  const total = pool.length, study = isStudy();
+  const sDone = pool.filter(q=>sessionDone.has(q.u)).length;
+  const hDone = pool.filter(q=>answers[q.u]).length;
   const info = document.getElementById('answerCardInfo');
-  if(info) info.textContent = total ? `已做 ${done}/${total}` : '';
+  if(info) info.textContent = total
+    ? (study ? `📖 学习模式 · 第 ${pos+1}/${total} 题（不记录成绩）`
+             : `本次已做 ${sDone}/${total} · 历史累计 ${hDone}`)
+    : '';
+  /* 绿/红 = 本次练习的对错；浅灰蓝 = 以前做过但本轮还没做（提示"可以再刷一遍"） */
+  const cellCls = q => {
+    if(sessionDone.has(q.u)) return (answers[q.u] && answers[q.u].ok) ? 'done-ok' : 'done-bad';
+    return answers[q.u] ? 'was-done' : '';
+  };
   const reusable = (__cardPool === pool && __cardCells && __cardCells.length === total
                     && grid.children.length === total);
   if(reusable){
     if(__cardCur >= 0 && __cardCells[__cardCur]) __cardCells[__cardCur].classList.remove('cur');
     for(let i = 0; i < total; i++){
-      const rec = answers[pool[i].u];
-      const cls = rec ? (rec.ok ? 'done-ok' : 'done-bad') : '';
+      const cls = cellCls(pool[i]);
       if(__cardCls[i] !== cls){
         __cardCls[i] = cls;
         __cardCells[i].className = 'gcell' + (cls ? ' ' + cls : '');
@@ -1879,11 +1962,11 @@ function renderAnswerCard(){
   const cells = [], clss = [];
   pool.forEach((q, i)=>{
     const c = document.createElement('div');
-    const cls = answers[q.u] ? (answers[q.u].ok ? 'done-ok' : 'done-bad') : '';
+    const cls = cellCls(q);
     c.className = 'gcell' + (cls ? ' ' + cls : '');
     if(i===pos) c.classList.add('cur');
     c.textContent = i+1;
-    c.title = q.s + ' · ' + q.t;
+    c.title = q.s + ' · ' + q.t + (answers[q.u] ? '（历史已做）' : '');
     c.onclick = ()=>{ pos = i; wrongPractice=false; showQ(); scrollToQuestion(); };
     cells.push(c);
     clss.push(cls);
@@ -1893,12 +1976,12 @@ function renderAnswerCard(){
 }
 
 /* ============ 错题重练 ============ */
-let wrongPractice = false;
 function practiceWrong(){
   if(!wrongs.length){ toast('暂无错题'); return; }
   const wset = new Set(wrongs);
   pool = BANK.filter(q=>wset.has(q.u)).sort(()=>Math.random()-0.5);
   pos = 0; wrongPractice = true;
+  newSession();
   switchTab('practice');
   document.getElementById('fSubject').value='';
   document.getElementById('fType').value='';
@@ -3561,7 +3644,7 @@ function jumpToQ(uid){
   sel.value = q.s; fillChapterSelect();
   document.getElementById('fChapter').value = '';
   document.getElementById('fType').value = '';
-  startPractice();
+  startPractice(true);            // 从搜索/导图跳进来：保留本轮作答状态，不清空
   const idx = pool.findIndex(x=>x.u===uid);
   if(idx >= 0){ pos = idx; showQ(); }
 }
@@ -3574,7 +3657,7 @@ function goPracticeSubject(s){
   fillChapterSelect();
   document.getElementById('fChapter').value = '';
   document.getElementById('fType').value = '';
-  startPractice();
+  startPractice(true);            // 从导图跳进来：保留本轮作答状态
 }
 
 /* ============ 初始化 ============ */
@@ -3630,6 +3713,7 @@ refreshStats();
     checkAI();
   }
 })();
+updateModeTip();
 startPractice();
 </script>
 </body>
