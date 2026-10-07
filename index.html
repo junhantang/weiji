@@ -391,6 +391,7 @@ mark.trap { background:#fff1a8; color:#a16207; padding:0 2px; border-radius:3px;
 
 
 
+
 /*BAKE_CSS_S*/html.has-prog #qCard[data-bake]{display:none}/*BAKE_CSS_E*/
 </style>
 <!--VIDEO_REF_START-->
@@ -2213,7 +2214,7 @@ function clearLog(){
 }
 
 async function callOllama(prompt, maxTokens, model){
-  model = model || 'qwen3:1.7b';
+  model = model || 'qwen2.5:1.5b';
   const ctl = new AbortController();
   const to = setTimeout(()=>ctl.abort(), 90000);
   try{
@@ -2233,12 +2234,12 @@ async function aiExplain(){
   const out = document.getElementById('aiOut');
   if(!curQ || aiBusy) return;
   aiBusy = true;
-  out.textContent = '🤖 AI(1.7B) 思考中…';
+  out.textContent = '🤖 AI(1.5B) 思考中…';
   const opts = Object.entries(curQ.o||{}).map(([k,v])=>k+'. '+v).join('；');
   const note = notes[curQ.u] ? ('\n学员笔记/疑问（请优先回应）：' + notes[curQ.u].text) : '';
   const prompt = '你是四川卫生公共基础(卫基)考试辅导老师。请解析题目并核对答案：\n题型：'+curQ.t+'\n科目：'+curQ.s+'\n题目：'+curQ.q+'\n选项：'+(opts||'（判断题）')+'\n题库答案：'+curQ.a+'\n题库解析：'+(curQ.e||'无')+note+'\n\n请用中文回答：1.正确答案及理由（3句内）；2.核心考点；3.易错点。若你认为题库答案有误请明确指出。';
   let lastErr = null;
-  for(const m of ['qwen3:1.7b','qwen3:0.6b']){
+  for(const m of ['qwen2.5:1.5b','qwen3:0.6b']){
     try{
       const res = await callOllama(prompt, 600, m);
       out.innerHTML = '<div style="white-space:pre-wrap;line-height:1.8">'+res.replace(/</g,'&lt;')+'</div>'+
@@ -2253,8 +2254,8 @@ async function aiExplain(){
 
 function aiTopicExplain(subject, topic, outId){
   const out = document.getElementById(outId); if(!out) return;
-  out.style.display = 'block'; out.textContent = '🤖 AI(1.7B) 生成中…';
-  callOllama('请详细解释'+subject+'中"'+topic+'"这个知识点，包括：1.定义 2.关键要点 3.考试常见考点 4.记忆口诀。用中文，简洁适合考前复习。', 600, 'qwen3:1.7b')
+  out.style.display = 'block'; out.textContent = '🤖 AI(1.5B) 生成中…';
+  callOllama('请详细解释'+subject+'中"'+topic+'"这个知识点，包括：1.定义 2.关键要点 3.考试常见考点 4.记忆口诀。用中文，简洁适合考前复习。', 600, 'qwen2.5:1.5b')
     .then(res=>{ out.innerHTML = '<div style="white-space:pre-wrap;line-height:1.8">'+res.replace(/</g,'&lt;')+'</div>'; logEvent('ai_topic', { topic: topic }); })
     .catch(()=>{ out.textContent = '⚠️ AI不可用：请先双击 E:\\卫基刷题\\1-启动Ollama服务.bat'; logEvent('ai_fail', { topic: topic }); });
 }
