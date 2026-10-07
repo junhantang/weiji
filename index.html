@@ -390,6 +390,7 @@ mark.trap { background:#fff1a8; color:#a16207; padding:0 2px; border-radius:3px;
 
 
 
+
 /*BAKE_CSS_S*/html.has-prog #qCard[data-bake]{display:none}/*BAKE_CSS_E*/
 </style>
 <!--VIDEO_REF_START-->
@@ -1618,7 +1619,7 @@ function isStudy(){ return curMode() === 'study'; }
 function newSession(){ sessionDone = new Set(); }
 
 const MODE_TIPS = {
-  'seq':        '按题库顺序刷。<b>以前做过的题会重新出</b>，不会直接显示答案；从上次没做到的地方接着开始。',
+  'seq':        '',   // 2026-10-07 用户点名去掉默认提示（顺序刷不打扰，切到其他模式才显示说明）
   'rand':       '题池随机打乱。<b>以前做过的题也会重新出</b>，适合检验真实掌握度。',
   'un-done':    '只出<b>从没做过</b>的题，做过的自动跳过（按历史记录判断）。',
   'wrong-first':'错题排在最前面。答错自动进错题本，答对（错题重练中）自动移出。',
@@ -1626,7 +1627,9 @@ const MODE_TIPS = {
 };
 function updateModeTip(){
   const t = document.getElementById('modeTip'); if(!t) return;
-  t.innerHTML = MODE_TIPS[curMode()] || '';
+  const tip = MODE_TIPS[curMode()] || '';
+  t.innerHTML = tip;
+  t.style.display = tip ? '' : 'none';   // 空提示整条隐藏，手机端不剩空卡片
 }
 
 function buildPool(){
