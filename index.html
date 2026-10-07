@@ -406,6 +406,7 @@ mark.trap { background:#fff1a8; color:#a16207; padding:0 2px; border-radius:3px;
 
 
 
+
 /*BAKE_CSS_S*/html.has-prog #qCard[data-bake]{display:none}/*BAKE_CSS_E*/
 </style>
 <!--VIDEO_REF_START-->
@@ -1511,7 +1512,9 @@ function nbQNames(q){
   const tA = (q.a || '') + ' ' + (q.o ? Object.keys(q.o).map(k => q.o[k]).join(' ') : '');
   const tE = q.e || '';
   const nQ = nbNorm(tQ), nA = nbNorm(tA), nE = nbNorm(tE);   // 归一化后再比（全角/半角、连字符差异不再漏）
-  const subj = qSubj(q), chap = qChap(q);
+  /* 交叉学科：改用 nbPickChap —— 它内部优先返回用户手动锁定的 QCHAP_LOCK，
+     这样点「切范围」后名词解释的章权重跟着变（原来这里写死 qChap，切章无效） */
+  const subj = qSubj(q), chap = (typeof nbPickChap === 'function') ? nbPickChap(q, subj) : qChap(q);
   const hits = [];
   NAME_LIST.forEach(function(it, i){
     if(!it || !it.n || it.n.length < 2 || NAME_STOP[it.n]) return;
