@@ -377,6 +377,7 @@ mark.trap { background:#fff1a8; color:#a16207; padding:0 2px; border-radius:3px;
 
 
 
+
 /*BAKE_CSS_S*/html.has-prog #qCard[data-bake]{display:none}/*BAKE_CSS_E*/
 </style>
 <!--VIDEO_REF_START-->
@@ -890,7 +891,7 @@ const VIDEO_REF = JSON.parse(document.getElementById('d_VIDEO_REF').textContent)
         <select id="fMode" onchange="updateModeTip()">
           <option value="seq">顺序刷题</option><option value="rand">随机刷题</option>
           <option value="un-done">只刷未做</option><option value="wrong-first">错题优先</option>
-          <option value="study">📖 学习模式（直接看答案）</option>
+          <option value="study">📖 学习模式</option>
         </select>
         <button class="primary" onclick="startPractice()">开始 / 应用</button>
       </div>
@@ -1910,7 +1911,7 @@ document.addEventListener('keydown', e => {
 /* 🔁 重做本题：把当前题在本轮标回「没做过」，题面重新出（历史成绩不动） */
 function redoCur(){
   if(!curQ) return;
-  if(isStudy()){ toast('学习模式本来就只读不记录，直接看答案就行'); return; }
+  if(isStudy()){ toast('学习模式只读不记录，无需作答'); return; }
   if(!sessionDone.has(curQ.u)){ toast('本题本轮还没作答，直接选答案即可'); return; }
   sessionDone.delete(curQ.u);
   showQ();
